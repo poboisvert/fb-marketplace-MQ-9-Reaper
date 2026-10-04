@@ -1,42 +1,38 @@
 # Facebook Marketplace MCP Server
 
-An MCP server that provides access to Facebook Marketplace via direct GraphQL API calls. No browser automation at runtime — speaks Facebook's internal protocol directly.
-
-## How It Works
-
-Facebook's web client makes all Marketplace requests as `POST /api/graphql/` with a `doc_id` (query hash) and `variables`. This server replays those requests using your existing Facebook session cookies from Chrome.
-
-**Think of it like [pypush](https://github.com/JJTech0130/pypush) for iMessage — direct protocol, no browser.**
+An MCP server that provides access to Facebook Marketplace using your existing Chrome Facebook session. Location lookup uses Facebook's GraphQL API. Listing search reads the Marketplace search page for that session.
 
 ## Prerequisites
 
 - **macOS** (cookie extraction uses Keychain)
 - **Google Chrome** with an active Facebook login
-- **Node.js** 20+
+- **Python** 3.11+
 
 ## Installation
 
 ```bash
-git clone <this-repo>
-cd facebook-marketplace-mcp
-npm install
-npm run build
+cd server
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -e .
 ```
 
-## Setup with Claude Code
+`python3` on macOS is often older than 3.11. Use `python3.12` or any Python 3.11+ binary.
+
+## Setup
 
 ```bash
-claude mcp add facebook-marketplace -- node /path/to/facebook-marketplace-mcp/dist/index.js
+facebook-marketplace-mcp
 ```
 
-Or add to your Claude Code config manually:
+Or point an MCP client at the module:
 
 ```json
 {
   "mcpServers": {
     "facebook-marketplace": {
-      "command": "node",
-      "args": ["/path/to/facebook-marketplace-mcp/dist/index.js"],
+      "command": "python",
+      "args": ["-m", "facebook_marketplace_mcp"],
       "env": {
         "CHROME_PROFILE": "Default"
       }
@@ -45,21 +41,150 @@ Or add to your Claude Code config manually:
 }
 ```
 
+Use the virtualenv's `python` if the package is not on the default `PATH`.
+
+## CLI
+
+`facebook-marketplace` calls Marketplace directly, without an MCP client or a model turn. Every command accepts `--json` (print records instead of a table) and `--chrome-profile` (Chrome profile directory; default `CHROME_PROFILE` or `Default`).
+
+Mileage is never required and is not printed. The search page uses the Marketplace city on the logged-in Chrome account. `--latitude`, `--longitude`, and `--radius-km` are stored with a monitor but do not move that search. Omit them and they are saved as `0`, `0`, and `50`.
+
+### `search`
+
+Search listings and print `slug`, `price`, `title`, `location`, `seller`, and `url`.
+
+```bash
+facebook-marketplace search "cr-v 2023" --min-price 20000 --max-price 26000
+facebook-marketplace search "cr-v 2023" --province quebec
+facebook-marketplace search "crv 2023" "cr-v 2023" --province quebec
+```
+
+The first command looks up `cr-v 2023` and keeps listings from CA$20,000 through CA$26,000. The second searches the province of Quebec. Facebook is queried from Quebec City with a 650 km radius, then listings outside Quebec are dropped. `--province` also accepts `QC` and the other provinces and territories.
+
+Sellers use different wording for the same car. Pass several names, or separate them with commas, and the command searches each name and keeps one row per listing:
+
+```bash
+facebook-marketplace search "crv 2023, cr-v 2023" --province quebec
+```
+
+Each name returns up to `--limit` listings. While Facebook reports another page, the search reads at most 10 pages. An empty page is skipped and the next page is still requested. The combined rows are saved in one folder, `runs/crv 2023, cr-v 2023/`.
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `--min-price` | none | Lowest price in dollars |
+| `--max-price` | none | Highest price in dollars |
+| `--limit` | 20 | Maximum rows |
+| `--category` | none | Marketplace category ID |
+| `--latitude` | 0 | Stored only; not sent as the search center |
+| `--longitude` | 0 | Stored only; not sent as the search center |
+| `--radius-km` | 50 | Stored only, unless `--province` is set |
+| `--province` | none | Canadian province or territory (`quebec`, `QC`). Searches that province and drops listings from outside it |
+
+An empty result prints `No listings found` and exits 0. A Keychain, cookie, or HTTP failure prints to stderr and exits 1.
+
+Each found item gets a stable slug, `slugified-title-<listing id>`. The first time a listing id is seen, that slug is kept in `~/.fb-marketplace/catalog.json` and reused even if the title changes later. One search name is one folder. Several names share one folder named with those names joined by commas:
+
+```text
+server/runs/cr-v 2023/<slug>.json
+server/runs/cr-v 2023/<slug>.csv
+server/runs/cr-v 2023/listings.csv
+server/runs/crv 2023, cr-v 2023/<slug>.json
+```
+
+Each item stores `created_at`, `updated_at`, `original_price`, and `price`. The listing photo from that run is saved beside it as `<slug>.png`. A snapshot of the listing page in `url` is saved as `<slug>-page.png` and shown when you open the item in `runs/index.html`. The first search sets `created_at` and `updated_at` to the same time, and `original_price` to the price found then. A later search that finds a lower price keeps `original_price`, writes the lower price into `price`, sets `price_dropped`, and changes `updated_at`. The same price leaves `updated_at` as it was.
+
+Open [`server/runs/index.html`](runs/index.html) in a browser to browse those search folders. A preview of that page is in [`runs/README.md`](runs/README.md). The page is rewritten after every search. `listing` and `monitor check` update the same item file.
+
+### `location`
+
+Resolve a city or town to coordinates.
+
+```bash
+facebook-marketplace location "Montreal"
+```
+
+Prints `name`, `latitude`, and `longitude` for each match, including Montreal, Quebec. Use a city name such as `Montreal`. `Montreal QC` can return no rows.
+
+### `listing`
+
+Open one listing by the id in a search URL (`/marketplace/item/<id>/`).
+
+```bash
+facebook-marketplace listing 29168184989452025
+```
+
+Prints the title, price, condition, location, seller, description, and URL.
+
+### `monitor add`
+
+Save a search in `~/.fb-marketplace/monitors.json` so later checks can show only new ids. Each `--query` value is stored as its own keyword. The same monitor name updates those keywords instead of creating a second monitor.
+
+```bash
+facebook-marketplace monitor add crv --query "crv 2023" --query "cr-v 2023" --min-price 20000 --max-price 26000
+```
+
+This saves a monitor named `crv` that tracks both `crv 2023` and `cr-v 2023`, then combines the rows. `--query` is required and can be repeated. Running `add` again with the same name updates those keywords and price bounds. `--limit` defaults to 24. `--category`, `--latitude`, `--longitude`, and `--radius-km` match `search`. The command prints the monitor name, id, and each keyword. It does not search yet.
+
+### `monitor check`
+
+Run each saved search and print listings whose ids were not seen before. Newly seen ids are stored, up to the last 500.
+
+```bash
+facebook-marketplace monitor check
+```
+
+Checks every monitor. Pass a name to check one:
+
+```bash
+facebook-marketplace monitor check crv
+```
+
+Each block starts with `<name>: <count> new`, then the same columns as `search`. A missing name, or no monitors at all, exits 1.
+
+### `monitor list`
+
+Show saved searches without contacting Facebook.
+
+```bash
+facebook-marketplace monitor list
+```
+
+Each monitor prints its name, price bounds when set, how many listing ids have been seen, and the last check time. Each keyword is printed on its own line under the name:
+
+```text
+crv	20000.0-26000.0 seen 0
+  crv 2023
+  cr-v 2023
+```
+
+### `monitor delete`
+
+Remove one saved search. Seen ids for that name are deleted with it.
+
+```bash
+facebook-marketplace monitor delete crv
+```
+
+Prints a confirmation. If `crv` does not exist, the error goes to stderr and the command exits 1.
+
 ## Tools
 
 ### `search_listings`
-Search Marketplace by query, location, and filters.
+Search Marketplace by one or more names and price filters.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `query` | string | yes | Search term |
+| `query` | string | yes | One or more names, separated by commas (`crv 2023, cr-v 2023`). Each name is searched and the rows are combined |
 | `latitude` | number | yes | Latitude of search center |
 | `longitude` | number | yes | Longitude of search center |
-| `radius_km` | number | no | Search radius (default: 50) |
+| `radius_km` | number | no | Search radius (default: 50). Kept for callers; the search page uses the Chrome account's Marketplace city |
 | `min_price` | number | no | Min price in dollars |
 | `max_price` | number | no | Max price in dollars |
 | `category` | string | no | Category ID |
-| `limit` | number | no | Max results (default: 20) |
+| `limit` | number | no | Max results per name (default: 20) |
+| `province` | string | no | Canadian province or territory (`quebec`, `QC`). Drops listings from outside it |
+
+Mileage may be missing on a listing and is not required. A comma-separated `query` runs one Marketplace search per name and keeps one row per listing id.
 
 ### `get_listing`
 Get full details for a specific listing.
@@ -68,31 +193,41 @@ Get full details for a specific listing.
 |-----------|------|----------|-------------|
 | `listing_id` | string | yes | Marketplace listing ID |
 
+### `search_location`
+Look up a city or town and return coordinates.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | yes | City or town name |
+
 ### `monitor_search`
-Save a search as a monitor to track new listings over time.
+Save a search as a monitor. Commas in `query` are separate keywords, stored on the monitor and combined on check. Saving the same `name` again replaces those keywords.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `name` | string | yes | Monitor name |
-| `query` | string | yes | Search term |
+| `query` | string | yes | One or more names, separated by commas. Checked and combined the same way as `search_listings` |
 | `latitude` | number | yes | Search center lat |
 | `longitude` | number | yes | Search center lng |
 | `radius_km` | number | no | Radius (default: 50) |
 | `min_price` | number | no | Min price |
 | `max_price` | number | no | Max price |
+| `province` | string | no | Canadian province or territory (`quebec`, `QC`) |
 
 ### `check_monitors`
 Check monitors for new listings since last check.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `monitor_name` | string | no | Check specific monitor, or omit for all |
+| `monitor_name` | string | no | Check a specific monitor, or omit for all |
 
 ### `list_monitors`
-List all saved monitors.
+List saved monitors with the keywords stored for each name.
 
 ### `delete_monitor`
 Delete a saved monitor.
+
+Monitors are stored in `~/.fb-marketplace/monitors.json`.
 
 ## Configuration
 
@@ -100,27 +235,15 @@ Delete a saved monitor.
 |-------------|---------|-------------|
 | `CHROME_PROFILE` | `Default` | Chrome profile directory name |
 
-## Updating GraphQL Queries
-
-Facebook rotates their `doc_id` values on deploys. If searches stop working:
-
-```bash
-npm install -D playwright
-npx playwright install chromium
-npm run capture-queries
-```
-
-This opens a browser, navigates Marketplace, and captures current query IDs. Update `src/facebook/queries.ts` with the new values.
-
 ## Rate Limiting
 
-The server self-rate-limits to 3 requests/minute with random jitter to avoid detection. This means searches take a few seconds.
+The server self-rate-limits to 3 requests/minute with random jitter. Searches take a few seconds.
 
 ## Limitations
 
 - **macOS only** for automatic cookie extraction
-- **Requires Chrome** with active Facebook session
+- **Requires Chrome** with an active Facebook session
 - **Facebook ToS** — automating Facebook violates their Terms of Service
-- **Fragile** — `doc_id` values change on Facebook deploys
+- **Search city** follows the Marketplace location on the logged-in Chrome account
 - **Rate limited** — aggressive use may trigger CAPTCHAs or account flags
 - **No write operations** — search/read only, no messaging or listing creation

@@ -1,30 +1,47 @@
 # Facebook Marketplace MCP Server — Context
 
 ## Architecture
-Direct GraphQL API replay (no browser at runtime). Speaks Facebook's internal `/api/graphql/` protocol using session cookies extracted from Chrome on macOS.
+
+Python stdio MCP server, plus a `facebook-marketplace` CLI that calls the same client without a model turn. It uses the logged-in Chrome Facebook session. A headless Chrome window is opened only to snapshot a listing page after a search.
+
+- Location lookup posts to Facebook `/api/graphql/` with `LOCATION_SEARCH_DOC_ID`.
+- Listing search loads `https://www.facebook.com/marketplace/search/?query=...` and reads embedded listing cards, then follows the feed cursor for at most 10 pages. Mileage is optional. Price bounds go on the URL as `minPrice` and `maxPrice`.
+- Several names in one search, such as `crv 2023` and `cr-v 2023`, are requested separately and combined by listing id. Commas or repeated names both work.
+- Listing detail loads `/marketplace/item/{id}/`.
+- `latitude`, `longitude`, and `radius_km` remain on `search_listings`. The search page uses the Chrome account's Marketplace city, unless `--province` selects a Canadian province.
 
 ## Key Files
-- `src/index.ts` — MCP server entry point (stdio transport)
-- `src/facebook/client.ts` — GraphQL HTTP client, session management, token extraction
-- `src/facebook/auth.ts` — Chrome cookie extraction (SQLite + Keychain decrypt)
-- `src/facebook/queries.ts` — Known `doc_id` values for Marketplace GraphQL operations
-- `src/facebook/parser.ts` — Response normalization for search results and listing details
-- `src/tools/` — MCP tool handlers (search, listing, monitor)
-- `src/storage/monitors.ts` — JSON file persistence for saved search monitors (~/.fb-marketplace/)
-- `scripts/capture-queries.ts` — Playwright-based script to discover new GraphQL doc_ids
+
+- `src/facebook_marketplace_mcp/cli.py` — `facebook-marketplace` terminal commands (no MCP import)
+- `src/facebook_marketplace_mcp/__main__.py` — MCP stdio entry point (`python -m facebook_marketplace_mcp`)
+- `src/facebook_marketplace_mcp/server.py` — `MCPServer` tool registration and stdio run
+- `src/facebook_marketplace_mcp/client.py` — session tokens, location GraphQL, search and listing HTTP. Splits a search into several names and merges the rows.
+- `src/facebook_marketplace_mcp/auth.py` — Chrome cookie DB copy, Keychain password, AES decrypt
+- `src/facebook_marketplace_mcp/queries.py` — location `doc_id` and GraphQL variables
+- `src/facebook_marketplace_mcp/parser.py` — search HTML and listing page parsing
+- `src/facebook_marketplace_mcp/monitors.py` — `~/.fb-marketplace/monitors.json`. Each monitor stores a `queries` list, such as `crv 2023` and `cr-v 2023`, and the last 500 seen ids. Adding the same name again replaces that list.
+- `src/facebook_marketplace_mcp/history.py` — slug, price catalog, and `runs/<query>/<slug>.json`. A combined search is one folder, such as `runs/crv 2023, cr-v 2023/`. Each item keeps `created_at`, `updated_at`, the original price, and a later lower price. `<slug>.png` is the listing photo. `<slug>-page.png` is a snapshot of the item `url`. Open `runs/index.html` to browse those folders.
+- `src/facebook_marketplace_mcp/preview.py` — headless Chrome snapshot of each listing page, using the Chrome Facebook cookies.
+- `src/facebook_marketplace_mcp/rate_limit.py` — 3 requests/minute with jitter
 
 ## Fragility Points
-- `doc_id` values change when Facebook deploys (use capture-queries script to update)
-- `fb_dtsg` token rotates per session (auto-refreshed on auth errors)
-- Facebook DOM structure changes affect listing detail parsing
-- Rate limiting: 3 req/min default to avoid detection
+
+- `LOCATION_SEARCH_DOC_ID` changes when Facebook deploys. Update `queries.py`.
+- Further search pages use the `CometMarketplaceSearchContentContainerQuery` id embedded in the first HTML page. That id changes when Facebook deploys.
+- `fb_dtsg` rotates per session. A 401 or 403 clears the cache; the next call reads tokens again.
+- Marketplace HTML changes break search cards and listing detail parsing.
+- Rate limit default is 3 requests/minute.
 
 ## Dependencies
-- `@modelcontextprotocol/sdk` — MCP server framework
-- `better-sqlite3` — Chrome cookie DB access
-- `zod` — Tool schema validation
+
+- `mcp` — MCP server (`MCPServer`, stdio)
+- `httpx` — Marketplace HTTP
+- `cryptography` — AES-128-CBC cookie decrypt
+- stdlib `sqlite3` — Chrome cookie database
 
 ## Cookie Encryption (macOS Chrome)
-- AES-128-CBC, PBKDF2 with SHA-1, salt="saltysalt", 1003 iterations
+
+- AES-128-CBC, PBKDF2 with SHA-1, salt `saltysalt`, 1003 iterations, 16-byte key
 - Key from Keychain: `security find-generic-password -w -s "Chrome Safe Storage" -a "Chrome"`
-- IV: 16 space characters, encrypted values prefixed with "v10"
+- IV: 16 space characters. Encrypted values are prefixed with `v10`.
+- After decrypting, skip Chrome's 32-byte header.
