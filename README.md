@@ -93,7 +93,15 @@ server/runs/crv 2023, cr-v 2023/<slug>.json
 
 Each item stores `created_at`, `updated_at`, `original_price`, and `price`. The listing photo from that run is saved beside it as `<slug>.png`. A snapshot of the listing page in `url` is saved as `<slug>-page.png` and shown when you open the item in `runs/index.html`. The first search sets `created_at` and `updated_at` to the same time, and `original_price` to the price found then. A later search that finds a lower price keeps `original_price`, writes the lower price into `price`, sets `price_dropped`, and changes `updated_at`. The same price leaves `updated_at` as it was.
 
-Open [`server/runs/index.html`](runs/index.html) in a browser to browse those search folders. A preview of that page is in [`runs/README.md`](runs/README.md). The page is rewritten after every search. `listing` and `monitor check` update the same item file.
+Open [`server/runs/index.html`](runs/index.html) in a browser to browse those search folders. The page is rewritten after every search. `listing` and `monitor check` update the same item file.
+
+The list shows each search folder, then the photo, price, title, place, and seller. Listings are cheapest first.
+
+![Search list with listing rows](runs/preview-list.png)
+
+Click a row and the saved Marketplace page opens under that row. Click it again to close it. Only one row stays open.
+
+![Open listing with the Marketplace page snapshot](runs/preview-open.png)
 
 ### `location`
 
