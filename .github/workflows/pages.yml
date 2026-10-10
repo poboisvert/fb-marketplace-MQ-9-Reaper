@@ -1,4 +1,4 @@
-name: Deploy GitHub Pages
+name: Update gh-pages
 
 on:
   push:
@@ -6,10 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: write
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
   group: pages
@@ -17,11 +14,10 @@ concurrency:
 
 jobs:
   update-pages-branch:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Create a branch and merge it into gh-pages
@@ -35,32 +31,9 @@ jobs:
           if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
             git fetch origin gh-pages
             git checkout -B gh-pages origin/gh-pages
-            git merge "$branch" --no-edit
+            git merge "$branch" --no-edit -X theirs
           else
             git checkout -B gh-pages "$branch"
           fi
           git push origin gh-pages
           git push origin --delete "$branch"
-      - name: Publish from gh-pages
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run pages.yml --ref gh-pages
-
-  deploy:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/gh-pages'
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Upload site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
