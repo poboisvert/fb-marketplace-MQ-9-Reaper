@@ -157,6 +157,43 @@ facebook-marketplace monitor check crv
 
 Each block starts with `<name>: <count> new`, then the same columns as `search`. A missing name, or no monitors at all, exits 1.
 
+When that check finds new listings, it also sends a Slack message. A plain `search` does not. A check with nothing new does not. The message is the monitor name, the new count, up to five lines of price, title, and place, and a link to the runs page.
+
+### Daily check
+
+`scripts/daily-monitors.sh` runs `monitor check` for every saved monitor. The check rewrites `runs/index.json`. The script then commits `runs/`, including `runs/index.html`, and pushes that folder to `fb-marketplace` `main`. `index.html` loads `index.json`. A day with no listing changes does not commit. A day with nothing new does not send Slack.
+
+The user crontab runs it at 9:00 in the Mac’s local timezone:
+
+```cron
+0 9 * * * /Users/poboisvert/Desktop/GIT/mrk-agent/server/scripts/daily-monitors.sh
+```
+
+The Mac has to be on and logged in at that time. The check reads Chrome’s Facebook cookies from the Keychain, and cron does not wake a sleeping Mac. Output is appended to `~/Library/Logs/fb-marketplace-daily.log`.
+
+### Notify
+
+Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps). Under OAuth & Permissions, add the bot scope `chat:write`, then install the app to the workspace. Copy the Bot User OAuth Token (`xoxb-...`). Invite that bot to the channel that should receive alerts, and copy the channel ID from the channel details.
+
+Export the values in the shell that runs `facebook-marketplace monitor check` or `facebook-marketplace-mcp`:
+
+```bash
+export SLACK_BOT_TOKEN="xoxb-your-bot-token"
+export SLACK_CHANNEL="C0123456789"
+```
+
+`SLACK_BOT_TOKEN` and `SLACK_CHANNEL` are required. `SLACK_CHANNEL` is the channel ID. A name such as `#marketplace` also works when the bot is in that channel.
+
+The same names can be written in `server/.env`. Copy `server/.env.example` to start. That file is ignored by git. Values already set in the shell are kept. Do not put the token in the repo or in `~/.fb-marketplace/monitors.json`. If either value is missing, the check prints `Slack skipped: set SLACK_BOT_TOKEN and SLACK_CHANNEL.` and still finishes. A Slack error is printed the same way. `not_in_channel` means the bot has not been invited to that channel.
+
+Confirm the token and channel with:
+
+```bash
+pytest tests/test_slack_setup.py
+```
+
+The test checks the bot with Slack, then posts one message to `SLACK_CHANNEL`. It skips when either value is missing.
+
 ### `monitor list`
 
 Show saved searches without contacting Facebook.
@@ -250,6 +287,8 @@ Monitors are stored in `~/.fb-marketplace/monitors.json`.
 | Env Variable | Default | Description |
 |-------------|---------|-------------|
 | `CHROME_PROFILE` | `Default` | Chrome profile directory name |
+| `SLACK_BOT_TOKEN` | | Slack bot token (`xoxb-...`). Required to notify on new monitor listings |
+| `SLACK_CHANNEL` | | Slack channel ID, or a name such as `#marketplace`. Required with `SLACK_BOT_TOKEN` |
 
 ## Rate Limiting
 

@@ -9,6 +9,7 @@ from dataclasses import asdict
 
 from facebook_marketplace_mcp.client import FacebookClient, SearchParams, parse_search_names
 from facebook_marketplace_mcp.history import RUNS_DIR, query_dir_name, serve_runs
+from facebook_marketplace_mcp.notify import notify_new_listings
 from facebook_marketplace_mcp.monitors import (
     add_monitor,
     delete_monitor,
@@ -261,6 +262,7 @@ async def _monitor_check(args: argparse.Namespace) -> None:
         result = await client.search_listings(params_from_dict(monitor.params))
         new_listings = [listing for listing in result.listings if listing.id not in monitor.seenIds]
         update_monitor_seen_ids(monitor.name, [listing.id for listing in new_listings])
+        notify_new_listings(monitor.name, new_listings)
         reports.append(
             {
                 "name": monitor.name,

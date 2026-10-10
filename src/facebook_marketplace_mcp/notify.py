@@ -1,51 +1,60 @@
-"""Send a short Pushover alert when a monitor finds new listings."""
+"""Send a short Slack message when a monitor finds new listings."""
 
 import os
 import sys
+from pathlib import Path
 
 import httpx
 
-PUSHOVER_URL = "https://api.pushover.net/1/messages.json"
+SLACK_URL = "https://slack.com/api/chat.postMessage"
 RUNS_URL = "https://poboisvert.github.io/fb-marketplace-MQ-9-Reaper/runs/index.html"
 MAX_LINES = 5
 MAX_MESSAGE = 1024
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+
+
+def _load_env_file() -> None:
+    if not _ENV_FILE.exists():
+        return
+    for line in _ENV_FILE.read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if not text or text.startswith("#") or "=" not in text:
+            continue
+        key, value = text.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 def notify_new_listings(name: str, listings: list) -> None:
-    """Post one Pushover message for new listings. Empty checks stay quiet."""
+    """Post one Slack message for new listings. Empty checks stay quiet."""
     if not listings:
         return
-    token = os.environ.get("PUSHOVER_TOKEN", "").strip()
-    user = os.environ.get("PUSHOVER_USER", "").strip()
-    if not token or not user:
+    _load_env_file()
+    token = os.environ.get("SLACK_BOT_TOKEN", "").strip()
+    channel = os.environ.get("SLACK_CHANNEL", "").strip()
+    if not token or not channel:
         print(
-            "Pushover skipped: set PUSHOVER_TOKEN and PUSHOVER_USER.",
+            "Slack skipped: set SLACK_BOT_TOKEN and SLACK_CHANNEL.",
             file=sys.stderr,
         )
         return
     try:
         response = httpx.post(
-            PUSHOVER_URL,
-            data=_payload(name, listings, token, user),
+            SLACK_URL,
+            headers={"Authorization": f"Bearer {token}"},
+            json=_payload(name, listings, channel),
             timeout=20,
         )
         response.raise_for_status()
+        body = response.json()
+        if not body.get("ok"):
+            print(f"Slack failed: {body.get('error', 'unknown')}", file=sys.stderr)
     except Exception as exc:
-        print(f"Pushover failed: {exc}", file=sys.stderr)
+        print(f"Slack failed: {exc}", file=sys.stderr)
 
 
-def _payload(name: str, listings: list, token: str, user: str) -> dict[str, str]:
-    data = {
-        "token": token,
-        "user": user,
-        "title": f"{name}: {len(listings)} new",
-        "message": _message(listings),
-        "url": RUNS_URL,
-    }
-    device = os.environ.get("PUSHOVER_DEVICE", "").strip()
-    if device:
-        data["device"] = device
-    return data
+def _payload(name: str, listings: list, channel: str) -> dict[str, str]:
+    text = f"*{name}: {len(listings)} new*\n{_message(listings)}\n<{RUNS_URL}|Open listings>"
+    return {"channel": channel, "text": text[:MAX_MESSAGE]}
 
 
 def _message(listings: list) -> str:
@@ -58,7 +67,7 @@ def _message(listings: list) -> str:
     extra = len(listings) - MAX_LINES
     if extra > 0:
         lines.append(f"+ {extra} more")
-    return "\n".join(lines)[:MAX_MESSAGE]
+    return "\n".join(lines)
 
 
 def _field(listing, name: str) -> str:

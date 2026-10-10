@@ -5,6 +5,7 @@ from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
 from facebook_marketplace_mcp.client import FacebookClient, SearchParams
+from facebook_marketplace_mcp.notify import notify_new_listings
 from facebook_marketplace_mcp.monitors import (
     add_monitor,
     delete_monitor,
@@ -244,6 +245,7 @@ async def check_monitors(
             else:
                 update_monitor_seen_ids(monitor.name, [])
                 results.append(f"### {monitor.name} — no new listings")
+            notify_new_listings(monitor.name, new_listings)
         return "\n\n---\n\n".join(results)
     except Exception as exc:
         return f"Error checking monitors: {exc}"
