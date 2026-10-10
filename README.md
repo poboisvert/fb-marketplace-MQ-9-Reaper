@@ -161,7 +161,7 @@ When that check finds new listings, it also sends a Slack message. A plain `sear
 
 ### Daily check
 
-`scripts/daily-monitors.sh` runs `monitor check` for every saved monitor. The check rewrites `runs/index.json`. The script then commits `runs/`, including `runs/index.html`, and pushes that folder to `fb-marketplace` `main`. `index.html` loads `index.json`. A push to `main` runs the Pages workflow and publishes the site. A day with no listing changes does not commit. A day with nothing new does not send Slack.
+`scripts/daily-monitors.sh` runs `monitor check` for every saved monitor. The check rewrites `runs/index.json`. The script then commits `runs/`, including `runs/index.html`, and pushes that folder to `fb-marketplace` `main`. `index.html` loads `index.json`. A push to `main` creates a short-lived branch, merges it into `gh-pages`, and that branch publishes the site. `main` itself does not deploy. A day with no listing changes does not commit. A day with nothing new does not send Slack.
 
 The user crontab runs it at 9:00 in the Mac’s local timezone:
 

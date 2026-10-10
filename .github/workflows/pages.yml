@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -15,7 +15,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  update-pages-branch:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create a branch and merge it into gh-pages
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="pages/${GITHUB_SHA}"
+          git checkout -b "$branch"
+          git push origin "$branch"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages
+            git checkout -B gh-pages origin/gh-pages
+            git merge "$branch" --no-edit
+          else
+            git checkout -B gh-pages "$branch"
+          fi
+          git push origin gh-pages
+          git push origin --delete "$branch"
+      - name: Publish from gh-pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run "Deploy GitHub Pages" --ref gh-pages
+
   deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/gh-pages'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
