@@ -1,12 +1,12 @@
 # Marketplace runs
 
-`index.html` is the browser for saved searches. A search rewrites this file, so reload it after a run. Open it directly, or serve this folder:
+`index.html` is the browser for saved searches. It reads each `<slug>.json` through `index.json` and checks again every 15 seconds. From the server project:
 
 ```bash
-python3 -m http.server 8767
+facebook-marketplace serve
 ```
 
-Then open `http://127.0.0.1:8767/index.html`.
+Then open `http://127.0.0.1:8767/index.html`. `--port` changes the port.
 
 ## Preview
 
@@ -18,7 +18,7 @@ Click a row and the saved Marketplace page opens underneath that row. Click the 
 
 ![Open listing with the Marketplace page snapshot](preview-open.png)
 
-The open row shows the page snapshot taken at search time, the listing URL, the current price, the original price, when the listing was first saved, when it last changed, and an **Open listing** link. A later lower price keeps the original price struck through and shows the new price in orange.
+The open row shows the same listing photo as the thumbnail, the listing URL, the current price, the original price, when the listing was first saved, when it was last found, and an **Open listing** link. A later lower price keeps the original price struck through and shows the new price in orange.
 
 ## What a search folder contains
 
@@ -27,7 +27,4 @@ Each search name is its own folder. Several names in one search share one folder
 | File | Contents |
 |------|----------|
 | `<slug>.json` | Title, price, original price, place, seller, URL, `created_at`, `updated_at` |
-| `<slug>.csv` | The same row |
-| `<slug>.png` | Listing photo |
-| `<slug>-page.png` | Snapshot of the listing page |
-| `listings.csv` | Every listing in the folder |
+| `<slug>.png` | The one listing photo, used as the thumbnail and the opened image |

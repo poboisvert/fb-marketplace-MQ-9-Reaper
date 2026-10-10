@@ -16,6 +16,7 @@ from facebook_marketplace_mcp.provinces import in_province, resolve_province, sa
 from facebook_marketplace_mcp.parser import (
     MarketplaceListing,
     MarketplaceListingDetail,
+    listing_page_image_url,
     parse_listing_detail_from_page,
     parse_search_html,
 )
@@ -310,6 +311,10 @@ class FacebookClient:
             has_next_page = has_next_page or more
 
         listings = _merge_listings(groups)
+        for listing in listings:
+            photo = await self.listing_page_photo(session.cookie_header, listing.id)
+            if photo:
+                listing.image_url = photo
         record_run(listings, query=", ".join(names))
         return SearchResult(listings=listings, has_next_page=has_next_page)
 
@@ -429,6 +434,23 @@ class FacebookClient:
 
         take(html_listings)
         return listings, more
+
+    async def listing_page_photo(self, cookie_header: str, listing_id: str) -> str:
+        """Photo shown first when the listing link is opened."""
+        await self.rate_limiter.wait()
+        url = f"https://www.facebook.com/marketplace/item/{listing_id}/"
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30) as http:
+            response = await http.get(
+                url,
+                headers={
+                    **BROWSER_HEADERS,
+                    "Cookie": cookie_header,
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+                },
+            )
+        if response.status_code >= 400:
+            return ""
+        return listing_page_image_url(response.text)
 
     async def get_listing_detail(self, listing_id: str) -> MarketplaceListingDetail:
         session = await self.ensure_session()

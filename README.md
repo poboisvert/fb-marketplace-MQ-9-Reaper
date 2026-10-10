@@ -86,14 +86,12 @@ Each found item gets a stable slug, `slugified-title-<listing id>`. The first ti
 
 ```text
 server/runs/cr-v 2023/<slug>.json
-server/runs/cr-v 2023/<slug>.csv
-server/runs/cr-v 2023/listings.csv
 server/runs/crv 2023, cr-v 2023/<slug>.json
 ```
 
-Each item stores `created_at`, `updated_at`, `original_price`, and `price`. The listing photo from that run is saved beside it as `<slug>.png`. A snapshot of the listing page in `url` is saved as `<slug>-page.png` and shown when you open the item in `runs/index.html`. The first search sets `created_at` and `updated_at` to the same time, and `original_price` to the price found then. A later search that finds a lower price keeps `original_price`, writes the lower price into `price`, sets `price_dropped`, and changes `updated_at`. The same price leaves `updated_at` as it was.
+Each item stores `created_at`, `updated_at`, `original_price`, and `price`. The photo shown when the listing link is opened is saved once, as `<slug>.png`, and that same file is the thumbnail and the opened image in `runs/index.html`. The first search sets `created_at` and `updated_at` to the same time, and `original_price` to the price found then. A later search that finds the listing again sets `updated_at` to that time. A lower price keeps `original_price`, writes the lower price into `price`, and sets `price_dropped`.
 
-Open [`server/runs/index.html`](runs/index.html) in a browser to browse those search folders. The page is rewritten after every search. `listing` and `monitor check` update the same item file.
+Open the saved listings with `facebook-marketplace serve`, then go to `http://127.0.0.1:8767/index.html`. The page reads each item JSON, and checks again every 15 seconds. A search updates `runs/index.json`, the list of those files. `listing` and `monitor check` update the same item file.
 
 The list shows each search folder, then the photo, price, title, place, and seller. Listings are cheapest first.
 
@@ -102,6 +100,16 @@ The list shows each search folder, then the photo, price, title, place, and sell
 Click a row and the saved Marketplace page opens under that row. Click it again to close it. Only one row stays open.
 
 ![Open listing with the Marketplace page snapshot](runs/preview-open.png)
+
+### `serve`
+
+Serve `runs/` on this machine so the listings page can read the JSON files.
+
+```bash
+facebook-marketplace serve
+```
+
+Open `http://127.0.0.1:8767/index.html`. `--port` chooses another port. The process keeps running until it is stopped.
 
 ### `location`
 

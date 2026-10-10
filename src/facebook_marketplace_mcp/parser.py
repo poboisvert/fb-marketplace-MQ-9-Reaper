@@ -32,6 +32,19 @@ class MarketplaceListingDetail(MarketplaceListing):
     seller_profile_url: str = ""
 
 
+def listing_page_image_url(html: str) -> str:
+    """Cover photo shown when the Marketplace item link is opened."""
+    start = html.find("marketplace_product_details_page")
+    window = html[start : start + 12000] if start >= 0 else html
+    photos = window.find("listing_photos")
+    if photos < 0:
+        return ""
+    match = re.search(r'"uri":"((?:\\.|[^"\\])*)"', window[photos : photos + 2000])
+    if not match:
+        return ""
+    return decode_js(match.group(1)).replace("\\/", "/")
+
+
 def listing_image_url(chunk: str) -> str:
     """Nearest listing photo URI in a search-card fragment."""
     matches = re.findall(r'"uri":"((?:\\.|[^"\\])*)"', chunk)
@@ -160,10 +173,17 @@ def parse_listing_detail_from_page(html: str, listing_id: str) -> MarketplaceLis
     if desc_match:
         detail.description = decode_html_entities(desc_match.group(1))
 
+    page_image = listing_page_image_url(html)
+    if page_image:
+        detail.image_url = page_image
+        detail.images.append(page_image)
     image_match = re.search(r'<meta\s+property="og:image"\s+content="([^"]*)"', html)
     if image_match:
-        detail.image_url = decode_html_entities(image_match.group(1))
-        detail.images.append(detail.image_url)
+        og_image = decode_html_entities(image_match.group(1))
+        if not detail.image_url:
+            detail.image_url = og_image
+        if og_image not in detail.images:
+            detail.images.append(og_image)
 
     price_match = (
         re.search(r'"formatted_amount"\s*:\s*"([^"]+)"', html)

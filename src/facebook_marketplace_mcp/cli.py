@@ -8,7 +8,7 @@ import sys
 from dataclasses import asdict
 
 from facebook_marketplace_mcp.client import FacebookClient, SearchParams, parse_search_names
-from facebook_marketplace_mcp.history import RUNS_DIR, query_dir_name
+from facebook_marketplace_mcp.history import RUNS_DIR, query_dir_name, serve_runs
 from facebook_marketplace_mcp.monitors import (
     add_monitor,
     delete_monitor,
@@ -93,7 +93,19 @@ def main(argv: list[str] | None = None) -> None:
     delete.add_argument("name")
     delete.set_defaults(func=_monitor_delete)
 
+    serve = sub.add_parser("serve", help="Serve saved listings in a browser")
+    serve.add_argument("--port", type=int, default=8767)
+
     args = parser.parse_args(argv)
+    if args.command == "serve":
+        try:
+            serve_runs(args.port)
+        except KeyboardInterrupt:
+            return
+        except Exception as exc:
+            print(exc, file=sys.stderr)
+            raise SystemExit(1) from exc
+        return
     try:
         asyncio.run(args.func(args))
     except CommandError as exc:

@@ -48,7 +48,7 @@ Loads the Marketplace search page for each name, then up to 10 feed pages, and k
 facebook-marketplace search "crv 2023" "cr-v 2023" --province quebec
 ```
 
-Each item's slug is `slugified-title-<listing id>`, stored on first sight in `~/.fb-marketplace/catalog.json` and reused for that listing id. One name is saved under `server/runs/<query>/`. Several names share one folder, `server/runs/crv 2023, cr-v 2023/`, with `<slug>.json`, `<slug>.csv`, and `listings.csv`. `<slug>.png` is the listing photo. `<slug>-page.png` is a snapshot of the item `url`, shown in `server/runs/index.html`. The item keeps `created_at`, `updated_at`, and `original_price`. A later run with a lower price keeps the original, stores the lower price, and changes `updated_at`. `listing` and `monitor check` update that same file.
+Each item's slug is `slugified-title-<listing id>`, stored on first sight in `~/.fb-marketplace/catalog.json` and reused for that listing id. One name is saved under `server/runs/<query>/`. Several names share one folder, `server/runs/crv 2023, cr-v 2023/`, with `<slug>.json`. `<slug>.png` is the one listing photo, shown as the thumbnail and the opened image in `server/runs/index.html`. The item keeps `created_at`, `updated_at`, and `original_price`. A later run sets `updated_at` to that time. A lower price keeps the original and stores the lower price. `listing` and `monitor check` update that same file.
 
 ### `facebook-marketplace location "Montreal"`
 
