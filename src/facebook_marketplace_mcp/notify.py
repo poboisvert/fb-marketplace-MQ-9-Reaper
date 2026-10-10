@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 
 SLACK_URL = "https://slack.com/api/chat.postMessage"
-RUNS_URL = "https://poboisvert.github.io/fb-marketplace-Reaper/runs/index.html"
+RUNS_URL = "https://poboisvert.github.io/fb-marketplace-reaper/runs/index.html"
 MAX_LINES = 5
 MAX_MESSAGE = 1024
 _ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
